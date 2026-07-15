@@ -128,23 +128,15 @@ function P4Screen:buildLayout()
     }
     self.col_buttons = col_buttons
 
-    -- Action buttons: New | Players | Difficulty | Close
-    local action_buttons = ButtonTable:new{
-        width                 = button_width,
-        shrink_unneeded_width = true,
-        buttons = {{
-            { text = _("Nouveau"),   callback = function() self:onNewGame() end },
-            { text = self:_playersLabel(),
-              id   = "players_btn",
-              callback = function() self:openPlayersMenu() end },
-            { text = self:_diffLabel(),
-              id   = "diff_btn",
-              callback = function() self:openDifficultyMenu() end },
+    -- Title bar with Options menu
+    local title_bar = self:buildTitleBar(_("Puissance 4"), function()
+        return {
+            { text = _("Nouveau"),          callback = function() self:onNewGame() end },
+            { text = self:_playersLabel(),  callback = function() self:openPlayersMenu() end },
+            { text = self:_diffLabel(),     callback = function() self:openDifficultyMenu() end },
             self:makeRulesButtonConfig(GAME_RULES_EN, GAME_RULES_FR),
-            self:makeCloseButtonConfig(),
-        }},
-    }
-    self.action_buttons = action_buttons
+        }
+    end)
 
     if is_landscape then
         -- Landscape: board + column buttons on left, controls on right
@@ -156,32 +148,26 @@ function P4Screen:buildLayout()
         }
         local right_panel = VerticalGroup:new{
             align = "center",
-            action_buttons,
-            VerticalSpan:new{ width = Size.span.vertical_large },
             self.status_text,
         }
-        self.layout = HorizontalGroup:new{
+        local content = HorizontalGroup:new{
             align = "center",
             board_col,
             HorizontalSpan:new{ width = Size.span.horizontal_default },
             right_panel,
         }
+        self:buildLandscapeLayout(title_bar, content)
     else
-        -- Portrait: action buttons top, then column buttons, then board, then status
-        self.layout = VerticalGroup:new{
+        -- Portrait: column buttons, then board, then status
+        local content = VerticalGroup:new{
             align = "center",
-            VerticalSpan:new{ width = Size.span.vertical_large },
-            action_buttons,
-            VerticalSpan:new{ width = Size.span.vertical_default },
             col_buttons,
             board_frame,
             VerticalSpan:new{ width = Size.span.vertical_default },
             self.status_text,
-            VerticalSpan:new{ width = Size.span.vertical_large },
         }
+        self:buildPortraitLayout(title_bar, content, nil)
     end
-
-    self[1] = self.layout
     self:updateStatus()
 end
 
