@@ -11,6 +11,7 @@ local function lrequire(name)
     return package.loaded[key]
 end
 
+local Button          = require("ui/widget/button")
 local ButtonTable     = require("ui/widget/buttontable")
 local Device          = require("device")
 local FrameContainer  = require("ui/widget/container/framecontainer")
@@ -112,20 +113,21 @@ function P4Screen:buildLayout()
         button_width = math.floor(sw * 0.94)
     end
 
-    -- Column selector buttons 1-7 (above the board in portrait)
-    local col_buttons_row = {}
+    -- Column selector buttons 1-7 (above the board in portrait), drawn as real bordered buttons
+    local col_btn_width = math.floor(board_frame_size / 7)
+    local col_buttons = HorizontalGroup:new{}
     for c = 1, 7 do
         local col = c
-        col_buttons_row[#col_buttons_row + 1] = {
-            text     = tostring(c),
-            callback = function() self:onColumnTap(col) end,
-        }
+        table.insert(col_buttons, Button:new{
+            text       = tostring(c),
+            width      = col_btn_width,
+            margin     = Size.margin.small,
+            bordersize = Size.border.button,
+            radius     = Size.radius.button,
+            padding    = Size.padding.buttontable,
+            callback   = function() self:onColumnTap(col) end,
+        })
     end
-    local col_buttons = ButtonTable:new{
-        width                 = board_frame_size,
-        shrink_unneeded_width = true,
-        buttons               = { col_buttons_row },
-    }
     self.col_buttons = col_buttons
 
     -- Title bar with Options menu
