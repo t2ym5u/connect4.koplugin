@@ -20,7 +20,7 @@ local P4Screen = lrequire("screen")
 -- ---------------------------------------------------------------------------
 
 local Puissance4Plugin = PluginBase:extend{
-    name      = "puissance4",
+    name      = "connect4",
     menu_text = _("Puissance 4"),
     menu_hint = "tools",
 }
