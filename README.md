@@ -1,4 +1,4 @@
-# puissance4.koplugin
+# connect4.koplugin
 
 A Connect Four (Puissance 4) plugin for [KOReader](https://github.com/koreader/koreader).
 
@@ -20,7 +20,7 @@ Two players alternate dropping pieces into a 7×6 grid. Pieces fall to the lowes
 
 ## Installation
 
-1. Download `puissance4.koplugin.zip` from the [latest release](../../releases/latest).
+1. Download `connect4.koplugin.zip` from the [latest release](../../releases/latest).
 2. Extract into the `plugins/` folder of your KOReader data directory.
 3. Restart KOReader.
 4. Open the menu → **Tools** → **Connect Four**.
