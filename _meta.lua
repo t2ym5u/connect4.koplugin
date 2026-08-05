@@ -1,5 +1,6 @@
+local _ = require("gettext")
 return {
     version     = "1.1.12",
-    fullname    = "Puissance 4",
-    description = "Connect Four — alignez 4 pièces avec IA.",
+    fullname    = _("Connect Four"),
+    description = _("Connect Four — align 4 pieces with AI."),
 }

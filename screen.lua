@@ -131,9 +131,9 @@ function P4Screen:buildLayout()
     self.col_buttons = col_buttons
 
     -- Title bar with Options menu
-    local title_bar = self:buildTitleBar(_("Puissance 4"), function()
+    local title_bar = self:buildTitleBar(_("Connect Four"), function()
         return {
-            { text = _("Nouveau"),          callback = function() self:onNewGame() end },
+            { text = _("New"),          callback = function() self:onNewGame() end },
             { text = self:_playersLabel(),  callback = function() self:openPlayersMenu() end },
             { text = self:_diffLabel(),     callback = function() self:openDifficultyMenu() end },
             self:makeRulesButtonConfig(GAME_RULES_EN, GAME_RULES_FR),
@@ -185,18 +185,18 @@ function P4Screen:onColumnTap(col)
     self.board_widget:refresh()
 
     if result == "full" then
-        self:updateStatus(_("Colonne pleine, choisissez une autre."))
+        self:updateStatus(_("Column full, choose another one."))
 
     elseif result == "won" then
         self.plugin:saveState(self:serializeState())
         local w = self:_winnerLabel(self.board.winner)
-        self:updateStatus(w .. " " .. _("gagne !"))
-        self:showMessage(w .. " " .. _("gagne !"), 3)
+        self:updateStatus(w .. " " .. _("wins!"))
+        self:showMessage(w .. " " .. _("wins!"), 3)
 
     elseif result == "draw" then
         self.plugin:saveState(self:serializeState())
-        self:updateStatus(_("Match nul !"))
-        self:showMessage(_("Match nul !"), 3)
+        self:updateStatus(_("Draw!"))
+        self:showMessage(_("Draw!"), 3)
 
     else  -- "ok"
         self.plugin:saveState(self:serializeState())
@@ -219,7 +219,7 @@ end
 
 function P4Screen:triggerAI()
     if self.board.status ~= "playing" then return end
-    self:updateStatus(_("L'IA réfléchit..."))
+    self:updateStatus(_("AI is thinking..."))
 
     local diff  = self.plugin:getSetting("difficulty", "medium")
     local depth = (diff == "easy") and 3 or (diff == "hard") and 7 or 5
@@ -234,11 +234,11 @@ function P4Screen:triggerAI()
 
             if result == "won" then
                 local w = self:_winnerLabel(self.board.winner)
-                self:updateStatus(w .. " " .. _("gagne !"))
-                self:showMessage(w .. " " .. _("gagne !"), 3)
+                self:updateStatus(w .. " " .. _("wins!"))
+                self:showMessage(w .. " " .. _("wins!"), 3)
             elseif result == "draw" then
-                self:updateStatus(_("Match nul !"))
-                self:showMessage(_("Match nul !"), 3)
+                self:updateStatus(_("Draw!"))
+                self:showMessage(_("Draw!"), 3)
             else
                 self:updateStatus()
             end
@@ -275,17 +275,17 @@ function P4Screen:updateStatus(msg)
         local dlabel  = MenuHelper.DIFFICULTY_LABELS[diff] or diff
 
         if board.status == "won" then
-            status = self:_winnerLabel(board.winner) .. " " .. _("gagne !")
+            status = self:_winnerLabel(board.winner) .. " " .. _("wins!")
         elseif board.status == "draw" then
-            status = _("Match nul !")
+            status = _("Draw!")
         else
             local turn_label = self:_playerLabel(board.turn)
-            status = turn_label .. " " .. _("joue")
+            status = turn_label .. " " .. _("to move")
             if players == 1 then
                 local pc = self.plugin:getSetting("player_num", 1)
                 local ai_num  = (pc == 1) and 2 or 1
                 local ai_name = self:_playerLabel(ai_num)
-                status = status .. "  ·  " .. dlabel .. " " .. string.format(_("(IA=%s)"), ai_name)
+                status = status .. "  ·  " .. dlabel .. " " .. string.format(_("(AI=%s)"), ai_name)
             end
         end
     end
@@ -298,23 +298,23 @@ end
 
 function P4Screen:_playerLabel(num)
     if num == 1 then
-        return _("Joueur 1 (Jaune)")
+        return _("Player 1 (Yellow)")
     else
-        return _("Joueur 2 (Rouge)")
+        return _("Player 2 (Red)")
     end
 end
 
 function P4Screen:_winnerLabel(num)
     if num == 1 then
-        return _("Joueur 1 (Jaune)")
+        return _("Player 1 (Yellow)")
     else
-        return _("Joueur 2 (Rouge)")
+        return _("Player 2 (Red)")
     end
 end
 
 function P4Screen:_playersLabel()
     local players = self.plugin:getSetting("players", 1)
-    return players == 1 and _("1 joueur") or _("2 joueurs")
+    return players == 1 and _("1 player") or _("2 players")
 end
 
 function P4Screen:_diffLabel()
@@ -329,10 +329,10 @@ end
 function P4Screen:openPlayersMenu()
     local players = self.plugin:getSetting("players", 1)
     MenuHelper.openPickerMenu{
-        title      = _("Mode de jeu"),
+        title      = _("Game mode"),
         items      = {
-            { id = 1, text = _("1 joueur (contre IA)") },
-            { id = 2, text = _("2 joueurs") },
+            { id = 1, text = _("1 player (vs AI)") },
+            { id = 2, text = _("2 players") },
         },
         current_id = players,
         on_select  = function(id)
@@ -353,10 +353,10 @@ end
 function P4Screen:openPlayerNumMenu()
     local pc = self.plugin:getSetting("player_num", 1)
     MenuHelper.openPickerMenu{
-        title      = _("Vous jouez en tant que"),
+        title      = _("You are playing as"),
         items      = {
-            { id = 1, text = _("1er joueur (Jaune)") },
-            { id = 2, text = _("2ème joueur (Rouge)") },
+            { id = 1, text = _("1st player (Yellow)") },
+            { id = 2, text = _("2nd player (Red)") },
         },
         current_id = pc,
         on_select  = function(id)
