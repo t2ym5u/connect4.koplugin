@@ -427,15 +427,19 @@ function P4Board:getAIMove(depth)
     end
     if best_col then return best_col end
 
-    -- Full minimax search
+    -- Full minimax search. Alpha and beta are carried across the loop: giving
+    -- every column a fresh (-inf, +inf) window, as this used to, discards
+    -- every cutoff between siblings, which is most of what alpha-beta buys.
+    local alpha, beta = -1e9, 1e9
     for _, col in ipairs(COL_ORDER) do
         local new_grid, row = simulateDrop(self.grid, col, current)
         if new_grid and row then
-            local val
+            local val = minimax(new_grid, depth - 1, alpha, beta, not maximizing_root)
+
             if maximizing_root then
-                val = minimax(new_grid, depth - 1, -1e9, 1e9, false)
+                if val > alpha then alpha = val end
             else
-                val = minimax(new_grid, depth - 1, -1e9, 1e9, true)
+                if val < beta then beta = val end
             end
 
             if maximizing_root then
