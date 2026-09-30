@@ -4,7 +4,7 @@ A Connect Four (Puissance 4) plugin for [KOReader](https://github.com/koreader/k
 
 ## Screenshot
 
-*(Screenshot to be added.)*
+![Screenshot](images/connect4.png)
 
 ## Rules
 
