@@ -12,7 +12,7 @@ return {
     ["1 player"]                            = { fr = "1 joueur", es = "1 jugador", de = "1 Spieler" },
     ["2 players"]                           = { fr = "2 joueurs", es = "2 jugadores", de = "2 Spieler" },
     ["Game mode"]                           = { fr = "Mode de jeu", es = "Modo de juego", de = "Spielmodus" },
-    ["1 player (vs AI)"]                    = { fr = "1 joueur (contre IA)", es = "1 jugador (contra IA)", de = "1 Spieler (gegen KI)" },
+    ["1 player (vs AI)"]                    = { fr = "1 joueur (contre l'IA)", es = "1 jugador (contra la IA)", de = "1 Spieler (gegen KI)" },
     ["You are playing as"]                  = { fr = "Vous jouez en tant que", es = "Estás jugando como", de = "Du spielst als" },
     ["1st player (Yellow)"]                 = { fr = "1er joueur (Jaune)", es = "1er jugador (Amarillo)", de = "1. Spieler (Gelb)" },
     ["2nd player (Red)"]                    = { fr = "2ème joueur (Rouge)", es = "2º jugador (Rojo)", de = "2. Spieler (Rot)" },
