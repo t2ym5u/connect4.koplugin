@@ -2,6 +2,17 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.1.17] - 2026-10-02
+
+### Fixed
+- Aligned `1 player (vs AI)` on "1 joueur (contre l'IA)", and the Spanish
+  equivalent. `package.loaded` is keyed by module name alone, so every
+  `require("i18n")` on the device resolves to one module and the first plugin
+  loaded wins it. Every plugin's `i18n_fr.lua` merges into that one shared
+  table, where plugins silently overwrite each other's translations. This
+  plugin and chess disagreed on the string, so whichever merged last decided
+  it for both.
+
 ## [1.1.16] - 2026-10-01
 
 ### Fixed
