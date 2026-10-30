@@ -30,8 +30,7 @@ Two players alternate dropping pieces into a 7×6 grid. Pieces fall to the lowes
 | Action | How |
 |--------|-----|
 | Drop a piece | Tap a column |
-| Undo last move | Tap **Undo** |
-| New game | Tap **New** |
+| New game | Tap **New game** |
 | Show rules | Tap **Rules** |
 
 ## License

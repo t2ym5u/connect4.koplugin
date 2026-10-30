@@ -2,6 +2,20 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.2.0] - 2026-10-30
+
+### Changed
+- Redesigned play screen: the 7×6 board fills the room the controls leave,
+  with square cells (the six rows used to be stretched to fill a square
+  board), and the column keys 1-7 form an even bar above it, each key over its
+  column.
+- Once the game is won or drawn, "New game" appears in place of the column
+  keys.
+- Title-bar menu in the shared order: New game (was "New"), "Difficulty:
+  Medium", "Players: 1" (was "1 player"), Rules.
+- The status line reads "7×6 · Medium · Turn: Player 1 (Yellow)" (the "(AI=…)"
+  part is gone) and wraps in landscape.
+
 ## [1.1.17] - 2026-10-02
 
 ### Fixed
