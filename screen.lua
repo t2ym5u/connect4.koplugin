@@ -11,9 +11,6 @@ local function lrequire(name)
     return package.loaded[key]
 end
 
-local Button          = require("ui/widget/button")
-local ButtonTable     = require("ui/widget/buttontable")
-local Device          = require("device")
 local FrameContainer  = require("ui/widget/container/framecontainer")
 local HorizontalGroup = require("ui/widget/horizontalgroup")
 local HorizontalSpan  = require("ui/widget/horizontalspan")
@@ -22,14 +19,13 @@ local UIManager       = require("ui/uimanager")
 local VerticalGroup   = require("ui/widget/verticalgroup")
 local VerticalSpan    = require("ui/widget/verticalspan")
 local _               = require("i18n")
+local T               = require("ffi/util").template
 
 local MenuHelper  = require("menu_helper")
 local ScreenBase  = require("screen_base")
 
 local P4Board       = lrequire("board")
 local P4BoardWidget = lrequire("board_widget")
-
-local DeviceScreen = Device.screen
 
 -- ---------------------------------------------------------------------------
 -- P4Screen
@@ -77,6 +73,11 @@ function P4Screen:init()
     end
 end
 
+-- Four in a row or a full grid ends the game.
+function P4Screen:isRoundOver()
+    return self.board.status ~= "playing"
+end
+
 function P4Screen:serializeState()
     return self.board:serialize()
 end
@@ -86,89 +87,71 @@ end
 -- ---------------------------------------------------------------------------
 
 function P4Screen:buildLayout()
-    local board = self.board
-
-    self.board_widget = P4BoardWidget:new{
-        board        = board,
-        onCellAction = function(col) self:onColumnTap(col) end,
-    }
-
     local is_landscape = self:isLandscape()
-    local sw = DeviceScreen:getWidth()
-
-    local board_frame = FrameContainer:new{
-        padding = Size.padding.default,
-        margin  = Size.margin.default,
-        self.board_widget,
-    }
-
-    local board_frame_size = self.board_widget.size
-        + (Size.padding.default + Size.margin.default) * 2
-
-    local button_width
-    if is_landscape then
-        local right_w = sw - board_frame_size - Size.span.horizontal_default * 2
-        button_width  = math.max(right_w - Size.span.horizontal_default, 100)
-    else
-        button_width = math.floor(sw * 0.94)
-    end
-
-    -- Column selector buttons 1-7 (above the board in portrait), drawn as real bordered buttons
-    local col_btn_width = math.floor(board_frame_size / 7)
-    local col_buttons = HorizontalGroup:new{}
-    for c = 1, 7 do
-        local col = c
-        table.insert(col_buttons, Button:new{
-            text       = tostring(c),
-            width      = col_btn_width,
-            margin     = Size.margin.small,
-            bordersize = Size.border.button,
-            radius     = Size.radius.button,
-            padding    = Size.padding.buttontable,
-            callback   = function() self:onColumnTap(col) end,
-        })
-    end
-    self.col_buttons = col_buttons
 
     -- Title bar with Options menu
     local title_bar = self:buildTitleBar(_("Connect Four"), function()
         return {
-            { text = _("New"),          callback = function() self:onNewGame() end },
-            { text = self:_playersLabel(),  callback = function() self:openPlayersMenu() end },
+            { text = _("New game"),         callback = function() self:onNewGame() end },
             { text = self:_diffLabel(),     callback = function() self:openDifficultyMenu() end },
+            { text = self:_playersLabel(),  callback = function() self:openPlayersMenu() end },
             self:makeRulesButtonConfig(GAME_RULES_EN, GAME_RULES_FR),
         }
     end)
 
+    local controls_w = self:getControlsWidth()
+    self.status_text:setMaxWidth(controls_w)
+    local controls = VerticalGroup:new{
+        align = "center",
+        self.status_text,
+    }
+
+    -- Column selector 1-7 above the board. It is built at the board's width
+    -- so each key sits over its column; a first copy only measures its height.
+    -- It is the game's action bar: once the game is over it offers New game.
+    local function buildColumnPad(width)
+        local keys = {}
+        for c = 1, 7 do
+            local col = c
+            keys[c] = { text = tostring(c), callback = function() self:onColumnTap(col) end }
+        end
+        return self:buildActionBar({ keys }, width)
+    end
+    local pad_h = buildColumnPad(controls_w):getSize().h + Size.span.vertical_default
+
+    -- The widget paints its own thick outer border, so the frame has none.
+    local budget_w, budget_h = self:getBoardBudget(title_bar, controls)
+    self.board_widget = P4BoardWidget:new{
+        board        = self.board,
+        max_width    = budget_w,
+        max_height   = budget_h - pad_h,
+        onCellAction = function(col) self:onColumnTap(col) end,
+    }
+    local board_frame = FrameContainer:new{
+        padding    = 0,
+        margin     = 0,
+        bordersize = 0,
+        self.board_widget,
+    }
+    self.col_buttons = buildColumnPad(self.board_widget:getSize().w)
+    local board_col = VerticalGroup:new{
+        align = "center",
+        self.col_buttons,
+        VerticalSpan:new{ width = Size.span.vertical_default },
+        board_frame,
+    }
+
     if is_landscape then
-        -- Landscape: board + column buttons on left, controls on right
-        local board_col = VerticalGroup:new{
-            align = "center",
-            col_buttons,
-            VerticalSpan:new{ width = Size.span.vertical_default },
-            board_frame,
-        }
-        local right_panel = VerticalGroup:new{
-            align = "center",
-            self.status_text,
-        }
         local content = HorizontalGroup:new{
             align = "center",
             board_col,
-            HorizontalSpan:new{ width = Size.span.horizontal_default },
-            right_panel,
+            HorizontalSpan:new{ width = self:getGutter() },
+            controls,
         }
         self:buildLandscapeLayout(title_bar, content)
     else
-        -- Portrait: column buttons, then board, then status
-        local content = VerticalGroup:new{
-            align = "center",
-            col_buttons,
-            board_frame,
-            VerticalSpan:new{ width = Size.span.vertical_default },
-            self.status_text,
-        }
-        self:buildPortraitLayout(title_bar, content, nil)
+        self:buildPortraitLayout(title_bar, board_col,
+            VerticalGroup:new{ align = "center", controls, VerticalSpan:new{ width = self:getGutter() } })
     end
     self:updateStatus()
 end
@@ -279,17 +262,15 @@ function P4Screen:updateStatus(msg)
         elseif board.status == "draw" then
             status = _("Draw!")
         else
-            local turn_label = self:_playerLabel(board.turn)
-            status = turn_label .. " " .. _("to move")
-            if players == 1 then
-                local pc = self.plugin:getSetting("player_num", 1)
-                local ai_num  = (pc == 1) and 2 or 1
-                local ai_name = self:_playerLabel(ai_num)
-                status = status .. "  ·  " .. dlabel .. " " .. string.format(_("(AI=%s)"), ai_name)
-            end
+            status = self:joinStatus(
+                T("%1×%2", 7, 6),
+                players == 1 and dlabel or nil,
+                T(_("Turn: %1"), self:_playerLabel(board.turn)))
         end
     end
     ScreenBase.updateStatus(self, status)
+    -- Every drop (player's or AI's) ends here.
+    self:refreshActionBar()
 end
 
 -- ---------------------------------------------------------------------------
@@ -313,13 +294,12 @@ function P4Screen:_winnerLabel(num)
 end
 
 function P4Screen:_playersLabel()
-    local players = self.plugin:getSetting("players", 1)
-    return players == 1 and _("1 player") or _("2 players")
+    return T(_("Players: %1"), self.plugin:getSetting("players", 1))
 end
 
 function P4Screen:_diffLabel()
     local diff = self.plugin:getSetting("difficulty", "medium")
-    return MenuHelper.DIFFICULTY_LABELS[diff] or diff
+    return T(_("Difficulty: %1"), MenuHelper.DIFFICULTY_LABELS[diff] or diff)
 end
 
 -- ---------------------------------------------------------------------------
@@ -329,7 +309,7 @@ end
 function P4Screen:openPlayersMenu()
     local players = self.plugin:getSetting("players", 1)
     MenuHelper.openPickerMenu{
-        title      = _("Game mode"),
+        title      = _("Players"),
         items      = {
             { id = 1, text = _("1 player (vs AI)") },
             { id = 2, text = _("2 players") },

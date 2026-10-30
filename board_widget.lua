@@ -33,6 +33,8 @@ local C_BORDER     = Blitbuffer.COLOR_BLACK
 local P4BoardWidget = GridWidgetBase:extend{
     board        = nil,
     size_ratio   = 0.85,
+    max_width    = nil,  -- pixels; with max_height, the room the screen has
+    max_height   = nil,
     onCellAction = nil,  -- callback(col)
 }
 
@@ -40,6 +42,15 @@ function P4BoardWidget:init()
     self.cols = 7
     self.rows = 6
     GridWidgetBase.init(self)
+    -- GridWidgetBase is square, which stretched the 6 rows into tall cells.
+    -- Square cells fitted inside the screen's budget instead: 7 wide, 6 high.
+    local max_w = self.max_width  or self.size
+    local max_h = self.max_height or self.size
+    local cell  = math.max(1, math.floor(math.min(max_w / 7, max_h / 6)))
+    self.cell_w, self.cell_h       = cell, cell
+    self.cell_w_px, self.cell_h_px = cell, cell
+    self.dimen      = Geom:new{ w = 7 * cell, h = 6 * cell }
+    self.paint_rect = Geom:new{ x = 0, y = 0, w = self.dimen.w, h = self.dimen.h }
 end
 
 -- Tapping anywhere in a column triggers a drop in that column.
@@ -59,16 +70,16 @@ function P4BoardWidget:paintTo(bb, x, y)
     local board = self.board
     local cw    = self.cell_w
     local ch    = self.cell_h
-    local size  = self.size
+    local w, h  = self.dimen.w, self.dimen.h
 
     -- Background: dark frame fills the entire widget
-    bb:paintRect(x, y, size, size, C_FRAME)
+    bb:paintRect(x, y, w, h, C_FRAME)
 
     -- Highlight last-drop column
     local last_col = board and board.last_col
     if last_col then
         local hx = x + math.floor((last_col - 1) * cw)
-        bb:paintRect(hx, y, math.ceil(cw), size, C_HIGHLIGHT)
+        bb:paintRect(hx, y, math.ceil(cw), h, C_HIGHLIGHT)
     end
 
     -- Draw each cell
@@ -118,19 +129,19 @@ function P4BoardWidget:paintTo(bb, x, y)
     local line_color = Blitbuffer.COLOR_GRAY_4
     for i = 1, 6 do  -- 6 vertical lines (between 7 columns)
         local lx = x + math.floor(i * cw)
-        drawLine(bb, lx, y, 1, size, line_color)
+        drawLine(bb, lx, y, 1, h, line_color)
     end
     for i = 1, 5 do  -- 5 horizontal lines (between 6 rows)
         local ly = y + math.floor(i * ch)
-        drawLine(bb, x, ly, size, 1, line_color)
+        drawLine(bb, x, ly, w, 1, line_color)
     end
 
     -- Outer border
     local thick = math.max(2, math.floor(math.min(cw, ch) * 0.06))
-    bb:paintRect(x,           y,            size,  thick, C_BORDER)
-    bb:paintRect(x,           y+size-thick, size,  thick, C_BORDER)
-    bb:paintRect(x,           y,            thick, size,  C_BORDER)
-    bb:paintRect(x+size-thick, y,           thick, size,  C_BORDER)
+    bb:paintRect(x,         y,         w,     thick, C_BORDER)
+    bb:paintRect(x,         y+h-thick, w,     thick, C_BORDER)
+    bb:paintRect(x,         y,         thick, h,     C_BORDER)
+    bb:paintRect(x+w-thick, y,         thick, h,     C_BORDER)
 end
 
 return P4BoardWidget
