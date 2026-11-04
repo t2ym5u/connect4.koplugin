@@ -203,259 +203,249 @@ function P4Board:countThreats(player, board_grid)
 end
 
 -- ---------------------------------------------------------------------------
--- Score a window of 4 cells for the evaluation function (from player 1's POV)
+-- AI — iterative-deepening alpha-beta (negamax) under a time budget
+--
+-- The search runs on a flat, padded copy of the grid (square (r, c) is
+-- r * W + c, with a border of sentinels) and drops/lifts pieces in place,
+-- instead of copying the whole grid for every simulated drop. The evaluation
+-- is unchanged and still from player 1's perspective; negamax just flips its
+-- sign for player 2.
 -- ---------------------------------------------------------------------------
 
-local function scoreWindow(cells, player)
-    local opponent = (player == 1) and 2 or 1
-    local p_count  = 0
-    local e_count  = 0
-    for _, v in ipairs(cells) do
-        if v == player   then p_count = p_count + 1
-        elseif v == 0    then e_count = e_count + 1
-        end
-    end
-    -- Check no opponent blocking
-    local opp_count = 0
-    for _, v in ipairs(cells) do
-        if v == opponent then opp_count = opp_count + 1 end
-    end
-    if opp_count > 0 then return 0 end
+-- Scales every time budget. A test harness sets it below 1 to reproduce on
+-- a desktop the depth an e-reader CPU (~25x slower) reaches in the budget.
+P4Board.AI_TIME_SCALE = 1
 
-    if p_count == 4 then return 100
-    elseif p_count == 3 and e_count == 1 then return 5
-    elseif p_count == 2 and e_count == 2 then return 2
-    end
-    return 0
+local clock = os.clock
+local INF   = 1e9
+local W     = COLS + 2      -- padded row width
+local EDGE  = 3             -- sentinel value
+
+local function sq(r, c) return r * W + c end
+
+-- Every window of 4 cells, as flat indices (horizontal, vertical, both
+-- diagonals), plus the centre column.
+local WINDOWS = {}
+local function addWindow(r, c, dr, dc)
+    WINDOWS[#WINDOWS + 1] = { sq(r, c), sq(r + dr, c + dc),
+                              sq(r + 2 * dr, c + 2 * dc), sq(r + 3 * dr, c + 3 * dc) }
 end
+for r = 1, ROWS do for c = 1, COLS - 3 do addWindow(r, c, 0, 1) end end
+for r = 1, ROWS - 3 do for c = 1, COLS do addWindow(r, c, 1, 0) end end
+for r = 1, ROWS - 3 do for c = 1, COLS - 3 do addWindow(r, c, 1, 1) end end
+for r = 4, ROWS do for c = 1, COLS - 3 do addWindow(r, c, -1, 1) end end
+local NWIN = #WINDOWS
+local CENTRE = {}
+for r = 1, ROWS do CENTRE[r] = sq(r, 4) end
 
--- ---------------------------------------------------------------------------
--- Static evaluation of a board state (from player 1's perspective)
--- ---------------------------------------------------------------------------
-
-local function evaluate(grid)
+-- Static evaluation from player 1's perspective: centre column +/-3 per
+-- piece; per window with only one colour in it, 100 for four, 5 for three
+-- and 2 for two (unchanged from the grid version).
+local function evaluate(g)
     local score = 0
-
-    -- Center column preference (column 4 = index 4)
     for r = 1, ROWS do
-        if grid[r][4] == 1 then score = score + 3
-        elseif grid[r][4] == 2 then score = score - 3
+        local v = g[CENTRE[r]]
+        if v == 1 then score = score + 3 elseif v == 2 then score = score - 3 end
+    end
+    for i = 1, NWIN do
+        local w = WINDOWS[i]
+        local p1, p2 = 0, 0
+        for k = 1, 4 do
+            local v = g[w[k]]
+            if v == 1 then p1 = p1 + 1 elseif v == 2 then p2 = p2 + 1 end
+        end
+        if p2 == 0 then
+            if p1 == 4 then score = score + 100
+            elseif p1 == 3 then score = score + 5
+            elseif p1 == 2 then score = score + 2 end
+        elseif p1 == 0 then
+            if p2 == 4 then score = score - 100
+            elseif p2 == 3 then score = score - 5
+            elseif p2 == 2 then score = score - 2 end
         end
     end
-
-    -- Horizontal windows
-    for r = 1, ROWS do
-        for c = 1, COLS - 3 do
-            local window = { grid[r][c], grid[r][c+1], grid[r][c+2], grid[r][c+3] }
-            score = score + scoreWindow(window, 1) - scoreWindow(window, 2)
-        end
-    end
-    -- Vertical windows
-    for r = 1, ROWS - 3 do
-        for c = 1, COLS do
-            local window = { grid[r][c], grid[r+1][c], grid[r+2][c], grid[r+3][c] }
-            score = score + scoreWindow(window, 1) - scoreWindow(window, 2)
-        end
-    end
-    -- Diagonal ↘
-    for r = 1, ROWS - 3 do
-        for c = 1, COLS - 3 do
-            local window = { grid[r][c], grid[r+1][c+1], grid[r+2][c+2], grid[r+3][c+3] }
-            score = score + scoreWindow(window, 1) - scoreWindow(window, 2)
-        end
-    end
-    -- Diagonal ↗
-    for r = 4, ROWS do
-        for c = 1, COLS - 3 do
-            local window = { grid[r][c], grid[r-1][c+1], grid[r-2][c+2], grid[r-3][c+3] }
-            score = score + scoreWindow(window, 1) - scoreWindow(window, 2)
-        end
-    end
-
     return score
 end
 
--- ---------------------------------------------------------------------------
--- AI helpers
--- ---------------------------------------------------------------------------
+local WIN_DIRS = { 1, W, W + 1, W - 1 }
 
--- Copy a grid (shallow rows)
-local function copyGrid(src)
-    local dst = {}
-    for r = 1, ROWS do
-        dst[r] = {}
-        for c = 1, COLS do
-            dst[r][c] = src[r][c]
-        end
+-- Does the piece of `p` at flat square s complete four in a row?
+local function isWin(g, s, p)
+    for k = 1, 4 do
+        local d = WIN_DIRS[k]
+        local n = 1
+        local t = s + d
+        while g[t] == p do n = n + 1; t = t + d end
+        t = s - d
+        while g[t] == p do n = n + 1; t = t - d end
+        if n >= 4 then return true end
     end
-    return dst
-end
-
--- Drop player's piece into col on a grid copy.
--- Returns: new_grid, row (nil if column full)
-local function simulateDrop(grid, col, player)
-    local target = nil
-    for r = ROWS, 1, -1 do
-        if grid[r][col] == 0 then
-            target = r
-            break
-        end
-    end
-    if not target then return nil, nil end
-    local new_grid = copyGrid(grid)
-    new_grid[target][col] = player
-    return new_grid, target
-end
-
--- Check win on a grid for player at (r, c)
-local function checkWinGrid(grid, r, c, player)
-    local function countDir(dr, dc)
-        local count = 0
-        local nr, nc = r + dr, c + dc
-        while nr >= 1 and nr <= ROWS and nc >= 1 and nc <= COLS
-              and grid[nr][nc] == player do
-            count = count + 1
-            nr = nr + dr
-            nc = nc + dc
-        end
-        return count
-    end
-    if 1 + countDir(0,1) + countDir(0,-1) >= 4 then return true end
-    if 1 + countDir(1,0) + countDir(-1,0) >= 4 then return true end
-    if 1 + countDir(-1,1) + countDir(1,-1) >= 4 then return true end
-    if 1 + countDir(-1,-1) + countDir(1,1) >= 4 then return true end
     return false
 end
 
--- Check if grid is full
-local function isFull(grid)
-    for c = 1, COLS do
-        if grid[1][c] == 0 then return false end
+-- Search state (one search at a time).
+local g, height          -- flat grid; height[c] = row a piece dropped in c lands on (0 = full)
+local deadline, aborted, nodes
+
+local function timeUp()
+    nodes = nodes + 1
+    if deadline and nodes % 256 == 0 and clock() > deadline then
+        aborted = true
     end
-    return true
+    return aborted
 end
 
--- Minimax with alpha-beta pruning
--- maximizing = true means it's player 1's turn to move
-local function minimax(grid, depth, alpha, beta, maximizing)
-    -- Check terminal states
+-- Negamax: value for the side to move `me`. Wins score 10000 + remaining
+-- depth so that sooner wins are preferred, as before.
+local function search(depth, alpha, beta, me)
+    if timeUp() then return 0 end
     if depth == 0 then
-        return evaluate(grid)
+        local e = evaluate(g)
+        return me == 1 and e or -e
     end
-    if isFull(grid) then
-        return 0
+    local op = 3 - me
+    local best = -INF
+    for i = 1, COLS do
+        local col = COL_ORDER[i]
+        local r = height[col]
+        if r > 0 then
+            local s = sq(r, col)
+            local v
+            g[s] = me
+            if isWin(g, s, me) then
+                v = 10000 + depth
+            else
+                height[col] = r - 1
+                v = -search(depth - 1, -beta, -alpha, op)
+                height[col] = r
+            end
+            g[s] = 0
+            if aborted then return 0 end
+            if v > best then
+                best = v
+                if v > alpha then
+                    alpha = v
+                    if alpha >= beta then break end
+                end
+            end
+        end
     end
+    if best == -INF then return 0 end   -- board full: draw
+    return best
+end
 
-    if maximizing then
-        local best = -1e9
-        for _, col in ipairs(COL_ORDER) do
-            local new_grid, row = simulateDrop(grid, col, 1)
-            if new_grid and row then
-                local val
-                if checkWinGrid(new_grid, row, col, 1) then
-                    val = 10000 + depth  -- prefer sooner wins
-                else
-                    val = minimax(new_grid, depth - 1, alpha, beta, false)
-                end
-                if val > best then best = val end
-                if best > alpha then alpha = best end
-                if alpha >= beta then break end
-            end
+local RANK = {}
+for i, col in ipairs(COL_ORDER) do RANK[col] = i end
+
+-- One root iteration at `depth`. Ties go to the column earliest in
+-- COL_ORDER, like the old fixed-depth engine, so an unbudgeted search
+-- plays exactly the column it used to.
+-- Returns the best column of those fully searched (nil if none), whether
+-- every column was searched, and the scores.
+local function searchRoot(root, depth, me)
+    local op = 3 - me
+    local best_col, best_v = nil, -INF
+    local scores = {}
+    for i = 1, #root do
+        local col = root[i]
+        local r = height[col]
+        local s = sq(r, col)
+        -- A column that would win a tie must prove it ties: search it with
+        -- a window one point lower so an equal score comes back exact.
+        local a = best_v
+        if best_col and RANK[col] < RANK[best_col] then a = best_v - 1 end
+        g[s] = me
+        height[col] = r - 1
+        local v = -search(depth - 1, -INF, -a, op)
+        height[col] = r
+        g[s] = 0
+        if aborted then return best_col, false, scores end
+        scores[col] = v
+        if v > best_v or (v == best_v and best_col and RANK[col] < RANK[best_col]) then
+            best_v, best_col = v, col
         end
-        return best
-    else
-        local best = 1e9
-        for _, col in ipairs(COL_ORDER) do
-            local new_grid, row = simulateDrop(grid, col, 2)
-            if new_grid and row then
-                local val
-                if checkWinGrid(new_grid, row, col, 2) then
-                    val = -10000 - depth  -- prefer sooner wins for player 2
-                else
-                    val = minimax(new_grid, depth - 1, alpha, beta, true)
-                end
-                if val < best then best = val end
-                if best < beta then beta = best end
-                if alpha >= beta then break end
-            end
-        end
-        return best
     end
+    return best_col, true, scores
 end
 
 -- ---------------------------------------------------------------------------
 -- Public AI entry point
 -- Returns best column (1-7) or nil if no move available.
--- depth: easy=3, medium=5, hard=7
+-- depth:  maximum search depth (easy=3, medium=5, hard=7).
+-- budget: seconds of thinking allowed (on the e-reader), or nil for no
+--         limit. Search deepens one ply at a time up to `depth` and keeps
+--         the best column of the deepest iteration that had time to finish.
 -- AI always plays as player 2 by convention in single-player mode, but the
--- minimax is called from the current player's perspective.
+-- search is run from the current player's perspective.
 -- ---------------------------------------------------------------------------
 
-function P4Board:getAIMove(depth)
+function P4Board:getAIMove(depth, budget)
     depth = depth or 5
     if self.status ~= "playing" then return nil end
 
-    local current = self.turn        -- 1 or 2
-    local maximizing_root = (current == 1)
+    local current  = self.turn        -- 1 or 2
+    local opponent = (current == 1) and 2 or 1
 
-    local best_col = nil
-    local best_val = maximizing_root and -1e9 or 1e9
+    g, height = {}, {}
+    for i = 0, (ROWS + 2) * W - 1 do g[i] = EDGE end
+    for c = 1, COLS do
+        height[c] = 0
+        for r = 1, ROWS do
+            g[sq(r, c)] = self.grid[r][c]
+            if self.grid[r][c] == 0 then height[c] = r end
+        end
+    end
+
+    local root = {}
+    for _, col in ipairs(COL_ORDER) do
+        if height[col] > 0 then root[#root + 1] = col end
+    end
+    if #root == 0 then return nil end
 
     -- Immediate win check (depth 1)
-    for _, col in ipairs(COL_ORDER) do
-        local new_grid, row = simulateDrop(self.grid, col, current)
-        if new_grid and row then
-            if checkWinGrid(new_grid, row, col, current) then
-                return col  -- take immediate win
-            end
-        end
+    for _, col in ipairs(root) do
+        local s = sq(height[col], col)
+        g[s] = current
+        local win = isWin(g, s, current)
+        g[s] = 0
+        if win then return col end   -- take immediate win
     end
 
     -- Block opponent's immediate win
-    local opponent = (current == 1) and 2 or 1
-    for _, col in ipairs(COL_ORDER) do
-        local new_grid, row = simulateDrop(self.grid, col, opponent)
-        if new_grid and row then
-            if checkWinGrid(new_grid, row, col, opponent) then
-                -- Check this column is actually playable for current player
-                local cg, _ = simulateDrop(self.grid, col, current)
-                if cg then
-                    best_col = col
-                end
-            end
+    local block
+    for _, col in ipairs(root) do
+        local s = sq(height[col], col)
+        g[s] = opponent
+        if isWin(g, s, opponent) then block = col end
+        g[s] = 0
+    end
+    if block then return block end
+
+    deadline = budget and (clock() + budget * P4Board.AI_TIME_SCALE) or nil
+    aborted, nodes = false, 0
+
+    -- Fallback if not even depth 1 finishes: the most central column.
+    local best_col = root[1]
+    self.ai_depth = 0
+    for d = 1, depth do
+        local col, complete, scores = searchRoot(root, d, current)
+        if complete then
+            best_col = col
+            self.ai_depth = d
+            -- Next iteration: best column first, then by this one's scores.
+            table.sort(root, function(x, y)
+                if x == col then return y ~= col end
+                if y == col then return false end
+                if scores[x] ~= scores[y] then return scores[x] > scores[y] end
+                return RANK[x] < RANK[y]
+            end)
+        else
+            -- The previous best is searched first, so a column that beat it
+            -- in this unfinished iteration is a better-informed choice.
+            if col and scores[root[1]] then best_col = col end
+            break
         end
     end
-    if best_col then return best_col end
-
-    -- Full minimax search. Alpha and beta are carried across the loop: giving
-    -- every column a fresh (-inf, +inf) window, as this used to, discards
-    -- every cutoff between siblings, which is most of what alpha-beta buys.
-    local alpha, beta = -1e9, 1e9
-    for _, col in ipairs(COL_ORDER) do
-        local new_grid, row = simulateDrop(self.grid, col, current)
-        if new_grid and row then
-            local val = minimax(new_grid, depth - 1, alpha, beta, not maximizing_root)
-
-            if maximizing_root then
-                if val > alpha then alpha = val end
-            else
-                if val < beta then beta = val end
-            end
-
-            if maximizing_root then
-                if val > best_val then
-                    best_val = val
-                    best_col = col
-                end
-            else
-                if val < best_val then
-                    best_val = val
-                    best_col = col
-                end
-            end
-        end
-    end
-
     return best_col
 end
 

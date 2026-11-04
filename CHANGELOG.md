@@ -2,6 +2,16 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.3.0] - 2026-11-04
+
+### Changed
+- Much faster AI: it no longer copies the grid for every simulated drop.
+  The same depth is searched about 10x faster and plays exactly the same
+  columns as before.
+- The AI now thinks for at most ~2 s per move on an e-reader (Easy 0.5 s,
+  Medium 1 s, Hard 2.2 s). Hard used to take up to ~20 s on a Kobo on some
+  moves; it now nearly always reaches its full depth within the limit.
+
 ## [1.2.3] - 2026-11-03
 
 ### Changed

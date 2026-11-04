@@ -82,6 +82,45 @@ describe("P4Board", function()
             -- Now it's player 1's turn with three in a row (1,2,3) on row 6.
             assert.are.equal(4, b:getAIMove(3))
         end)
+
+        it("blocks the opponent's immediate win", function()
+            local b = Board:new()
+            b:dropPiece(1); b:dropPiece(7)
+            b:dropPiece(2); b:dropPiece(7)
+            b:dropPiece(6); b:dropPiece(7)
+            -- Player 1 to move; player 2 threatens column 7.
+            assert.are.equal(7, b:getAIMove(5, 1.0))
+        end)
+
+        it("plays a legal move within its time budget all game long", function()
+            math.randomseed(3)
+            local b = Board:new()
+            local worst = 0
+            while b.status == "playing" do
+                local t0 = os.clock()
+                local col = b:getAIMove(7, 0.05)
+                local dt = os.clock() - t0
+                if dt > worst then worst = dt end
+                assert.is_not_nil(col)
+                assert.are.equal(0, b.grid[1][col])
+                -- Some noise so the game is not the same every run of the engine.
+                if math.random() < 0.3 then
+                    local c = math.random(7)
+                    if b.grid[1][c] == 0 then col = c end
+                end
+                b:dropPiece(col)
+            end
+            -- 0.05 s budget; generous slack for slow test interpreters.
+            assert.is_true(worst < 0.5, "slowest move " .. worst .. " s")
+        end)
+
+        it("still returns a legal move when no iteration can finish", function()
+            local b = Board:new()
+            b:dropPiece(4); b:dropPiece(4); b:dropPiece(3)
+            local col = b:getAIMove(7, 1e-9)
+            assert.is_not_nil(col)
+            assert.are.equal(0, b.grid[1][col])
+        end)
     end)
 
     describe("serialize / load", function()
