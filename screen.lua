@@ -55,6 +55,12 @@ Règles :
 • Si toute la grille est remplie sans gagnant, la partie est nulle.
 ]]
 
+-- Difficulty → maximum search depth, and thinking budget in seconds (on the
+-- e-reader). The search deepens up to DIFF_DEPTH and plays the deepest
+-- result it finished in time.
+local DIFF_DEPTH  = { easy = 3, medium = 5, hard = 7 }
+local DIFF_BUDGET = { easy = 0.5, medium = 1.0, hard = 2.2 }
+
 local P4Screen = ScreenBase:extend{}
 
 -- ---------------------------------------------------------------------------
@@ -205,11 +211,11 @@ function P4Screen:triggerAI()
     self:updateStatus(_("AI is thinking..."))
 
     local diff  = self.plugin:getSetting("difficulty", "medium")
-    local depth = (diff == "easy") and 3 or (diff == "hard") and 7 or 5
+    local depth = DIFF_DEPTH[diff] or 5
 
     UIManager:scheduleIn(0.05, function()
         if self.board.status ~= "playing" then return end
-        local col = self.board:getAIMove(depth)
+        local col = self.board:getAIMove(depth, DIFF_BUDGET[diff] or 1.0)
         if col then
             local result = self.board:dropPiece(col)
             self.board_widget:refresh()
