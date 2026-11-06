@@ -123,6 +123,86 @@ describe("P4Board", function()
         end)
     end)
 
+    describe("difficulty levels", function()
+        local function aiMove(b, id)
+            local L = Board.LEVELS[id]
+            return b:getAIMove(L.depth, L.budget, L)
+        end
+
+        -- A whole game, every move from `id`, the rng seeded.
+        local function playGame(id, seed)
+            math.randomseed(seed)
+            local b = Board:new()
+            local cols = {}
+            while b.status == "playing" do
+                local col = aiMove(b, id)
+                assert.are.equal(0, b.grid[1][col])
+                cols[#cols + 1] = col
+                b:dropPiece(col)
+            end
+            return table.concat(cols)
+        end
+
+        it("gets weaker from Hard to Easy", function()
+            local L = Board.LEVELS
+            assert.is_true(L.easy.depth < L.medium.depth and L.medium.depth < L.hard.depth)
+            assert.is_true(L.easy.noise > L.medium.noise and L.medium.noise > L.hard.noise)
+            assert.are.equal(0, L.hard.noise)
+            for _, id in ipairs({ "easy", "medium", "hard" }) do
+                assert.is_true(L[id].budget <= 2.2)
+            end
+        end)
+
+        it("every level still takes an immediate win, whatever the noise", function()
+            for seed = 1, 20 do
+                for _, id in ipairs({ "easy", "medium", "hard" }) do
+                    math.randomseed(seed)
+                    local b = Board:new()
+                    b:dropPiece(1); b:dropPiece(7)
+                    b:dropPiece(2); b:dropPiece(7)
+                    b:dropPiece(3); b:dropPiece(7)
+                    assert.are.equal(4, aiMove(b, id))
+                end
+            end
+        end)
+
+        it("every level still blocks an immediate loss", function()
+            for seed = 1, 20 do
+                for _, id in ipairs({ "easy", "medium" }) do
+                    math.randomseed(seed)
+                    local b = Board:new()
+                    b:dropPiece(1); b:dropPiece(7)
+                    b:dropPiece(2); b:dropPiece(7)
+                    b:dropPiece(6); b:dropPiece(7)
+                    assert.are.equal(7, aiMove(b, id))
+                end
+            end
+        end)
+
+        it("Easy and Medium vary between games", function()
+            for _, id in ipairs({ "easy", "medium" }) do
+                local seen, distinct = {}, 0
+                for seed = 1, 4 do
+                    local g = playGame(id, seed)
+                    if not seen[g] then seen[g] = true; distinct = distinct + 1 end
+                end
+                assert.is_true(distinct >= 2, id .. " played the same game every time")
+            end
+        end)
+
+        it("plays the same game twice under the same seed", function()
+            assert.are.equal(playGame("easy", 42), playGame("easy", 42))
+        end)
+
+        it("noise uses the given rng", function()
+            local b = Board:new()
+            b:dropPiece(4); b:dropPiece(3)
+            local plain = b:getAIMove(4)
+            local zero = b:getAIMove(4, nil, { noise = 1000, rng = function() return 0 end })
+            assert.are.equal(plain, zero)
+        end)
+    end)
+
     describe("serialize / load", function()
         it("round-trips the grid, turn and status", function()
             local b = Board:new()

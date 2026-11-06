@@ -2,6 +2,18 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.4.0] - 2026-11-05
+
+### Changed
+- Easy is really easy now: it looks two moves ahead instead of three and
+  often picks a weaker column. Measured, it now wins about half of its
+  games against a player who looks one move ahead (it won 70% before).
+  Every level still takes a winning move and blocks yours.
+- Easy and Medium no longer play the same game twice: a line that beat
+  them once will not win every time. Medium now looks four moves ahead
+  instead of five, so Hard is clearly stronger than Medium (about 75% of
+  the points instead of 63%).
+
 ## [1.3.2] - 2026-11-04
 
 ### Fixed
