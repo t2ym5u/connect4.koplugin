@@ -342,7 +342,10 @@ for i, col in ipairs(COL_ORDER) do RANK[col] = i end
 -- plays exactly the column it used to.
 -- Returns the best column of those fully searched (nil if none), whether
 -- every column was searched, and the scores.
-local function searchRoot(root, depth, me)
+-- noise > 0: every column that could still be picked once a bonus below
+-- `noise` is added gets its exact score, not just a bound (columns more than
+-- `noise` below the best cannot be picked, so they keep a cheap bound).
+local function searchRoot(root, depth, me, noise)
     local op = 3 - me
     local best_col, best_v = nil, -INF
     local scores = {}
@@ -354,6 +357,7 @@ local function searchRoot(root, depth, me)
         -- a window one point lower so an equal score comes back exact.
         local a = best_v
         if best_col and RANK[col] < RANK[best_col] then a = best_v - 1 end
+        if noise > 0 then a = best_v - noise end
         g[s] = me
         height[col] = r - 1
         local v = -search(depth - 1, -INF, -a, op)
@@ -369,18 +373,43 @@ local function searchRoot(root, depth, me)
 end
 
 -- ---------------------------------------------------------------------------
+-- Difficulty levels.
+-- depth:  deepest iteration of the search.
+-- budget: thinking time in seconds on the e-reader (CPU time, so a slower
+--         device searches less deep instead of taking longer).
+-- noise:  a random bonus in [0, noise) added to each column's score before
+--         choosing, so a level does not answer a line the same way every
+--         game (an open three is worth 5, a centre piece 3). Wins and losses
+--         found by the search (10000+) are far beyond it. Every level still
+--         takes an immediate win and blocks an immediate loss.
+-- Measured (Kobo-scaled budgets, randomised openings): Easy scores about
+-- 50-60% against a 1-ply greedy player, Medium and Hard each 70-80% against
+-- the level below.
+-- ---------------------------------------------------------------------------
+
+P4Board.LEVELS = {
+    easy   = { depth = 2, budget = 0.5, noise = 12 },
+    medium = { depth = 4, budget = 1.0, noise = 3 },
+    hard   = { depth = 7, budget = 2.2, noise = 0 },
+}
+
+-- ---------------------------------------------------------------------------
 -- Public AI entry point
 -- Returns best column (1-7) or nil if no move available.
--- depth:  maximum search depth (easy=3, medium=5, hard=7).
+-- depth:  maximum search depth (see LEVELS).
 -- budget: seconds of thinking allowed (on the e-reader), or nil for no
 --         limit. Search deepens one ply at a time up to `depth` and keeps
 --         the best column of the deepest iteration that had time to finish.
+-- opts:   optional { noise, rng } (see LEVELS; rng defaults to math.random).
 -- AI always plays as player 2 by convention in single-player mode, but the
 -- search is run from the current player's perspective.
 -- ---------------------------------------------------------------------------
 
-function P4Board:getAIMove(depth, budget)
+function P4Board:getAIMove(depth, budget, opts)
     depth = depth or 5
+    opts = opts or {}
+    local noise = opts.noise or 0
+    local rng = opts.rng or math.random
     if self.status ~= "playing" then return nil end
 
     local current  = self.turn        -- 1 or 2
@@ -427,11 +456,14 @@ function P4Board:getAIMove(depth, budget)
     -- Fallback if not even depth 1 finishes: the most central column.
     local best_col = root[1]
     self.ai_depth = 0
+    local exact = noise > 0
+    local final_scores
     for d = 1, depth do
-        local col, complete, scores = searchRoot(root, d, current)
+        local col, complete, scores = searchRoot(root, d, current, noise)
         if complete then
             best_col = col
             self.ai_depth = d
+            final_scores = scores
             -- Next iteration: best column first, then by this one's scores.
             table.sort(root, function(x, y)
                 if x == col then return y ~= col end
@@ -439,11 +471,23 @@ function P4Board:getAIMove(depth, budget)
                 if scores[x] ~= scores[y] then return scores[x] > scores[y] end
                 return RANK[x] < RANK[y]
             end)
+        elseif exact then
+            break
         else
             -- The previous best is searched first, so a column that beat it
             -- in this unfinished iteration is a better-informed choice.
             if col and scores[root[1]] then best_col = col end
             break
+        end
+    end
+
+    -- Noise: pick the column with the best score plus a random bonus, from
+    -- the deepest iteration that searched every column.
+    if exact and final_scores then
+        local best_v = -INF
+        for _, col in ipairs(root) do
+            local v = final_scores[col] + rng() * noise
+            if v > best_v then best_v, best_col = v, col end
         end
     end
     return best_col
