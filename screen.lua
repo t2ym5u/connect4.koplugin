@@ -209,8 +209,9 @@ function P4Screen:triggerAI()
     local diff  = self.plugin:getSetting("difficulty", "medium")
     local level = P4Board.LEVELS[diff] or P4Board.LEVELS.medium
 
-    UIManager:scheduleIn(0.05, function()
-        if self.board.status ~= "playing" then return end
+    self:schedule(0.05, function()
+        -- Re-checked: "2 players" or the side may have changed in the meantime.
+        if not self:_isAITurn() then return end
         local col = self.board:getAIMove(level.depth, level.budget, level)
         if col then
             local result = self.board:dropPiece(col)
@@ -236,12 +237,13 @@ end
 -- ---------------------------------------------------------------------------
 
 function P4Screen:onNewGame()
+    self:cancelScheduled()  -- an AI move still pending belongs to the old game
     self.board:reset()
     self.plugin:saveState(self:serializeState())
     self:buildLayout()
     UIManager:setDirty(self, function() return "ui", self.dimen end)
     if self:_isAITurn() then
-        UIManager:scheduleIn(0.1, function() self:triggerAI() end)
+        self:schedule(0.1, function() self:triggerAI() end)
     end
 end
 
